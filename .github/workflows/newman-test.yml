@@ -18,38 +18,35 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Global Newman Runner
-        run: npm install -g newman
+      - name: Install Global Newman & Markdown Reporter
+        run: npm install -g newman newman-reporter-markdown
 
       - name: Initialize Dashboard Step Summary Header
         run: |
           echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 CI Execution Environment Status" >> $GITHUB_STEP_SUMMARY
           echo "* **Run Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "* **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "* **Execution Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
 
       - name: Execute Collection Suite
         id: run-newman
-        # Using continuous integration logging flags (--disable-unicode and --no-color)
-        # to ensure logs parse correctly without breaking the shell interpreter.
+        # 1. Swapped '--no-color' with '--color off' to fix the syntax error
+        # 2. Added the markdown reporter to pipe clean tables directly into your step summary
         run: |
           newman run ./tests/postman/CRUD-Chain.postman_collection.json \
             -e ./tests/postman/social-prod.postman_environment.json \
             --delay-request 500 \
             --disable-unicode \
-            --no-color
-
-      - name: Append Success Metrics to Dashboard
-        if: success()
+            --color off \
+            -r cli,markdown \
+            --reporter-markdown-export text.md
+          
+      - name: Publish Test Report Matrix to Dashboard
+        if: always()
         run: |
-          echo "### ✅ Build Status: PASSED" >> $GITHUB_STEP_SUMMARY
-          echo "All contract validations, schema definitions, and multi-factor CRUD operations executed successfully." >> $GITHUB_STEP_SUMMARY
-
-      - name: Append Failure Diagnostics to Dashboard
-        if: failure()
-        run: |
-          echo "### ❌ Build Status: FAILED" >> $GITHUB_STEP_SUMMARY
-          echo "One or more integration data contracts failed validation checks." >> $GITHUB_STEP_SUMMARY
-          echo "Please expand the **Execute Collection Suite** step logs above in the terminal window to locate the broken key assertion." >> $GITHUB_STEP_SUMMARY
+          # If the markdown file was generated, append it directly onto the GitHub summary landing page
+          if [ -f text.md ]; then
+            cat text.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Newman execution failed before generating a report file." >> $GITHUB_STEP_SUMMARY
+          fi
