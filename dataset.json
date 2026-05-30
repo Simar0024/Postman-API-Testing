@@ -1,0 +1,5 @@
+[
+  {"PRODUCT_NAME": "Grafana Dashboard Node", "PRODUCT_PRICE": 150.00, "PRODUCT_CATEGORY": "Observability"},
+  {"PRODUCT_NAME": "", "PRODUCT_PRICE": 0.00, "PRODUCT_CATEGORY": "Validation-Edge-Case"},
+  {"PRODUCT_NAME": "PostgreSQL Replica Node Cluster Server Max Load", "PRODUCT_PRICE": 2499.99, "PRODUCT_CATEGORY": "Database Infrastructure"}
+]

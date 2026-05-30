@@ -1,0 +1,37 @@
+name: Products API CI Pipeline Automation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  api-integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Global Newman Runner
+        run: npm install -g newman
+
+      - name: Run Collection Suite & Compile Step Summary Markdown
+        run: |
+          echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Execution Metrics Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "Run Timestamp: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+          
+          # Execute newman suite and directly dump the text summary table onto the Github job landing screen
+          newman run ./tests/postman/CRUD-Chain.postman_collection.json \
+            -e ./tests/postman/social-prod.postman_environment.json \
+            --delay-request 500 \
+            --insecure >> $GITHUB_STEP_SUMMARY
+          
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
