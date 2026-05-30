@@ -1,0 +1,3 @@
+iteration,collectionName,requestName,method,url,status,code,responseTime,responseSize,executed,failed,skipped,totalAssertions,executedCount,failedCount,skippedCount
+"1","Task-Management-API","Get All Tasks","GET","https://jsonplaceholder.typicode.com/todos","OK","200","351","24311","Status code is 200, Response is an array",,,"2","2","0","0"
+"1","Task-Management-API","Mock Login","POST","https://httpbin.org/post","OK","200","3182","697","Login successful & Token saved",,,"1","1","0","0"
