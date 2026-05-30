@@ -21,17 +21,35 @@ jobs:
       - name: Install Global Newman Runner
         run: npm install -g newman
 
-      - name: Run Collection Suite & Compile Step Summary Markdown
+      - name: Initialize Dashboard Step Summary Header
         run: |
           echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 Execution Metrics Dashboard" >> $GITHUB_STEP_SUMMARY
-          echo "Run Timestamp: $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-          
-          # Execute newman suite and directly dump the text summary table onto the Github job landing screen
+          echo "### 🚀 CI Execution Environment Status" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "* **Execution Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+      - name: Execute Collection Suite
+        id: run-newman
+        # Using continuous integration logging flags (--disable-unicode and --no-color)
+        # to ensure logs parse correctly without breaking the shell interpreter.
+        run: |
           newman run ./tests/postman/CRUD-Chain.postman_collection.json \
             -e ./tests/postman/social-prod.postman_environment.json \
             --delay-request 500 \
-            --insecure >> $GITHUB_STEP_SUMMARY
-          
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            --disable-unicode \
+            --no-color
+
+      - name: Append Success Metrics to Dashboard
+        if: success()
+        run: |
+          echo "### ✅ Build Status: PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "All contract validations, schema definitions, and multi-factor CRUD operations executed successfully." >> $GITHUB_STEP_SUMMARY
+
+      - name: Append Failure Diagnostics to Dashboard
+        if: failure()
+        run: |
+          echo "### ❌ Build Status: FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "One or more integration data contracts failed validation checks." >> $GITHUB_STEP_SUMMARY
+          echo "Please expand the **Execute Collection Suite** step logs above in the terminal window to locate the broken key assertion." >> $GITHUB_STEP_SUMMARY
