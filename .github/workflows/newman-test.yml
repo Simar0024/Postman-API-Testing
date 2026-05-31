@@ -30,11 +30,10 @@ jobs:
 
       - name: Execute Collection Suite
         id: run-newman
-        # 1. Swapped '--no-color' with '--color off' to fix the syntax error
-        # 2. Added the markdown reporter to pipe clean tables directly into your step summary
         run: |
           newman run ./tests/postman/CRUD-Chain.postman_collection.json \
             -e ./tests/postman/social-prod.postman_environment.json \
+            --env-var "REQRES_API_KEY=${{ secrets.REQRES_API_KEY }}" \
             --delay-request 500 \
             --disable-unicode \
             --color off \
