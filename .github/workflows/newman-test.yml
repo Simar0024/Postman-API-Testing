@@ -18,36 +18,53 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Global Newman & Markdown Reporter
-        run: npm install -g newman newman-reporter-markdown
+      - name: Install Global Newman, Markdown, & Advanced HTML Reporters
+        run: |
+          npm install -g newman \
+                         newman-reporter-markdown \
+                         newman-reporter-htmlextra
 
       - name: Initialize Dashboard Step Summary Header
         run: |
           echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
-          echo "* **Run Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Branch Context:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "* **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
 
       - name: Execute Collection Suite
         id: run-newman
+        # We invoke 'cli', 'markdown', and 'htmlextra' simultaneously
         run: |
           newman run ./tests/postman/CRUD-Chain.postman_collection.json \
             -e ./tests/postman/social-prod.postman_environment.json \
             -d ./tests/postman/dataset.json \
             --env-var "REQRES_API_KEY=${{ secrets.REQRES_API_KEY }}" \
-            --env-var "REQRES_ENV_NAME=prod" \
+            --env-var "REQRES_ENV_NAME=${{ secrets.REQRES_ENV_NAME }}" \
             --delay-request 500 \
             --disable-unicode \
             --color off \
-            -r cli,markdown \
-            --reporter-markdown-export text.md
-          
+            -r cli,markdown,htmlextra \
+            --reporter-markdown-export text.md \
+            --reporter-htmlextra-export report.html \
+            --reporter-htmlextra-title "Products CRUD Integration Test Matrix" \
+            --reporter-htmlextra-darkTheme
+
       - name: Publish Test Report Matrix to Dashboard
         if: always()
         run: |
-          # If the markdown file was generated, append it directly onto the GitHub summary landing page
           if [ -f text.md ]; then
             cat text.md >> $GITHUB_STEP_SUMMARY
+            echo -e "\n\n### 📂 Advanced HTML Report Generated" >> $GITHUB_STEP_SUMMARY
+            echo "Download the **postman-html-dashboard** artifact from the summary actions panel above to inspect body bodies, tokens, and data validation graphs." >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Newman execution failed before generating a report file." >> $GITHUB_STEP_SUMMARY
-          fi
+          fi 
+
+      - name: Upload HTML Dashboard Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-html-dashboard
+          path: report.html
+          retention-days: 7
