@@ -33,7 +33,9 @@ jobs:
         run: |
           newman run ./tests/postman/CRUD-Chain.postman_collection.json \
             -e ./tests/postman/social-prod.postman_environment.json \
+            -d ./tests/postman/dataset.json \
             --env-var "REQRES_API_KEY=${{ secrets.REQRES_API_KEY }}" \
+            --env-var "REQRES_ENV_NAME=prod" \
             --delay-request 500 \
             --disable-unicode \
             --color off \
