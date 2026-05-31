@@ -25,8 +25,7 @@ jobs:
             collection run ${{ secrets.POSTMAN_COLL_ID }} \
               -e ${{ secrets.POSTMAN_ENV_ID }} \
               -r cli,html \
-              --reporter-html-export ./report.html \
-              --insecure
+              --reporter-html-export ./report.html
 
       # This saves the HTML report when the run is complete
       - name: Upload HTML Report Artifact
