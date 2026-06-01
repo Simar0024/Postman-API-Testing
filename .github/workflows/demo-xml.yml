@@ -1,4 +1,4 @@
-name: Automated Cloud API Testing
+name: XML Postman API Testing
 
 on:
   push:
@@ -26,8 +26,8 @@ jobs:
         with:
           command: |
             collection run ${{ secrets.POSTMAN_COLL_ID }} \
-              --environment ${{ secrets.POSTMAN_ENV_ID }} \
-              --r cli,junit \
+              -e ${{ secrets.POSTMAN_ENV_ID }} \
+              -r cli,junit \
               --reporter-junit-export ./new-report.xml
 
       - name: Compile XML Into Visual GitHub Summary Dashboard
