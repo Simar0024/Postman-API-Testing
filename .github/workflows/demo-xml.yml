@@ -1,0 +1,91 @@
+name: Automated Cloud API Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  postman-cli-tests:
+    name: Run Postman Cloud Automation Suite
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+      checks: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Execute Postman Suite via CLI Action
+        uses: postmanlabs/postman-cli-action@v1
+        env:
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+        with:
+          command: |
+            collection run ${{ secrets.POSTMAN_COLL_ID }} \
+              --environment ${{ secrets.POSTMAN_ENV_ID }} \
+              --r cli,junit \
+              --reporter-junit-export ./new-report.xml
+
+      - name: Compile XML Into Visual GitHub Summary Dashboard
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: "🚀 Postman API Integration Test Report"
+          path: "./new-report.xml"
+          reporter: "java-junit"
+
+      # FIXED: Replaced the broken third-party action with a native, zero-dependency bash parser
+      - name: Compile Native Markdown Metrics Summary
+        if: always()
+        run: |
+          echo "### 📊 Postman Automation Run Metrics Summary" >> $GITHUB_STEP_SUMMARY
+          
+          # Install a fast XML parser utility natively on the Ubuntu image
+          sudo apt-get update && sudo apt-get install -y xmlstarlet
+          
+          # Safely extract metrics from the generated JUnit XML file
+          TESTS=$(xmlstarlet sel -t -v "string(//testsuites/@tests)" ./report.xml 2>/dev/null || echo "0")
+          FAILURES=$(xmlstarlet sel -t -v "string(//testsuites/@failures)" ./report.xml 2>/dev/null || echo "0")
+          ERRORS=$(xmlstarlet sel -t -v "string(//testsuites/@errors)" ./report.xml 2>/dev/null || echo "0")
+          TIME=$(xmlstarlet sel -t -v "string(//testsuites/@time)" ./report.xml 2>/dev/null || echo "0")
+          
+          # Handle edge cases where fields might return empty strings
+          if [ -z "$TESTS" ]; then TESTS=0; fi
+          if [ -z "$FAILURES" ]; then FAILURES=0; fi
+          if [ -z "$ERRORS" ]; then ERRORS=0; fi
+          
+          # Calculate Passed Tests
+          PASSED=$((TESTS - FAILURES - ERRORS))
+          if [ $PASSED -lt 0 ]; then PASSED=0; fi
+          
+          # Determine status badge
+          if [ "$FAILURES" -eq 0 ] && [ "$ERRORS" -eq 0 ]; then
+            STATUS="🟢 PASSED"
+          else
+            STATUS="🔴 FAILED"
+          fi
+          
+          # Build a clean Markdown Table directly onto the GitHub Landing Summary Panel
+          echo "| Metric Metric | Execution Value Context |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run Status** | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total Executed Assertions** | \`$TESTS\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Passed Assertions** | \`$PASSED\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Failed Assertions** | \`$FAILURES\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Runtime Error Faults** | \`$ERRORS\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total Execution Duration** | \`${TIME}s\` |" >> $GITHUB_STEP_SUMMARY
+          
+          # Also write a file clone to disk so you can upload it as an asset if needed
+          echo -e "### Postman Test Summary\n\n| Metric | Value |\n|---|---|\n| Status | $STATUS |\n| Total | $TESTS |\n| Failures | $FAILURES |" > ./detailed-summary.md
+
+      - name: Upload Test Report Summary Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-api-test-summary
+          path: ./detailed-summary.md
+          retention-days: 7
