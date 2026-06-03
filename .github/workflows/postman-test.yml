@@ -43,19 +43,16 @@ jobs:
           path: ./report.html
           retention-days: 7
 
-      - name: Stage Dashboard in Dedicated Subfolder
+      - name: Stage Dashboard for Branch Isolation
         if: success() && github.ref == 'refs/heads/main'
         run: |
           mkdir -p public/cloud-api
           cp ./report.html public/cloud-api/index.html
 
-      - name: Upload Pages Web Assets
+      - name: Commit and Push Assets to gh-pages Branch
         if: success() && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: ./public
-
-      - name: Deploy Live HTML Report Dashboard
-        if: success() && github.ref == 'refs/heads/main'
-        id: deployment
-        uses: actions/deploy-pages@v4
+          branch: gh-pages
+          folder: public
+          clean: false # Prevents deleting public/products-api/
