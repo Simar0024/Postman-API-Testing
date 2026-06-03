@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: "pages-cloud-api"
@@ -73,8 +71,3 @@ jobs:
           git commit -m "internal(qa): automated update to cloud-api metrics" || echo "No changes to commit"
           git push origin gh-pages
           
-      - name: Request Live GitHub Pages Rebuild Engine
-        if: success() && github.ref == 'refs/heads/main'
-        uses: actions/deploy-pages@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
