@@ -75,8 +75,8 @@ jobs:
       - name: Stage Dashboard for Static Hosting
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          mkdir -p public
-          cp newman-report.html public/index.html
+          mkdir -p public/products-api
+          cp newman-report.html public/products-api/index.html
       - name: Upload Pages Web Assets
         if: success() && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
