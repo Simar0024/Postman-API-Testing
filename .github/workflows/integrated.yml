@@ -1,0 +1,202 @@
+name: Consolidated API Test & Deployment Matrix
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  run-all-tests:
+    name: Execute API Test Matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Global Reporters
+        run: npm install -g newman newman-reporter-markdown newman-reporter-htmlextra
+
+      # ----------------------------------------------------
+      # SUITE 1: PRODUCTS API (Newman Execution)
+      # ----------------------------------------------------
+      - name: Execute Products API Suite
+        continue-on-error: true # Ensures Suite 2 runs even if Suite 1 has a broken assertion
+        run: |
+          newman run "https://api.getpostman.com/collections/${{ secrets.NEWMAN_COLL_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
+            -e "https://api.getpostman.com/environments/${{ secrets.NEWMAN_ENV_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
+            -d ./tests/postman/dataset.json \
+            --delay-request 500 \
+            -r cli,htmlextra \
+            --reporter-htmlextra-export ./products-report.html \
+            --reporter-htmlextra-title "Products CRUD Integration Test Matrix" \
+            --reporter-htmlextra-darkTheme
+
+      # ----------------------------------------------------
+      # SUITE 2: CLOUD API (Postman CLI Execution)
+      # ----------------------------------------------------
+      - name: Execute Cloud API Suite via Postman CLI
+        uses: postmanlabs/postman-cli-action@v1
+        continue-on-error: true
+        env:
+          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+        with:
+          command: |
+            collection run ${{ secrets.POSTMAN_COLL_ID }} \
+              -e ${{ secrets.POSTMAN_ENV_ID }} \
+              -r cli,html \
+              --reporter-html-export ./cloud-report.html
+
+     # ----------------------------------------------------
+      # STAGING & AGGREGATION STEP
+      # ----------------------------------------------------
+      - name: Consolidate Dashboards & Create Entry Gateway
+        if: always()
+        run: |
+          # 1. Create the base public hosting folder along with both metric subfolders
+          mkdir -p public/products-api
+          mkdir -p public/cloud-api
+          
+          # 2. Copy the test results into their isolated subfolders (checking if they exist first)
+          if [ -f ./products-report.html ]; then
+            cp ./products-report.html public/products-api/index.html
+          else
+            echo "⚠️ Warning: products-report.html was not generated."
+          fi
+          
+          if [ -f ./cloud-report.html ]; then
+            cp ./cloud-report.html public/cloud-api/index.html
+          else
+            echo "⚠️ Warning: cloud-report.html was not generated."
+          fi
+          
+          # 3. FIXED: Target the file directly into public/index.html instead of the root directory
+          cat << 'EOF' > public/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>QA Automation Core Metrics Hub</title>
+              <style>
+                  :root {
+                      --bg-primary: #0f172a;
+                      --bg-card: #1e293b;
+                      --border-color: #334155;
+                      --text-main: #f8fafc;
+                      --text-muted: #94a3b8;
+                      --accent-products: #ff6c37;
+                      --accent-cloud: #007acc;
+                      --transition-speed: 0.25s;
+                  }
+                  * { box-sizing: border-box; margin: 0; padding: 0; }
+                  body {
+                      background-color: var(--bg-primary);
+                      color: var(--text-main);
+                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                      min-height: 100vh;
+                      display: flex;
+                      flex-direction: column;
+                      justify-content: center;
+                      align-items: center;
+                      padding: 2rem;
+                  }
+                  .container { width: 100%; max-width: 900px; text-align: center; }
+                  .header { margin-bottom: 3.5rem; }
+                  .header h1 {
+                      font-size: 2.5rem;
+                      font-weight: 700;
+                      margin-bottom: 0.75rem;
+                      background: linear-gradient(to right, #ffffff, #94a3b8);
+                      -webkit-background-clip: text;
+                      -webkit-text-fill-color: transparent;
+                  }
+                  .header p { color: var(--text-muted); font-size: 1.125rem; }
+                  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 2rem; margin-bottom: 3rem; }
+                  .card {
+                      background-color: var(--bg-card);
+                      border: 1px solid var(--border-color);
+                      border-radius: 12px;
+                      padding: 2.5rem 2rem;
+                      text-align: left;
+                      text-decoration: none;
+                      color: inherit;
+                      display: flex;
+                      flex-direction: column;
+                      transition: border-color var(--transition-speed), transform var(--transition-speed);
+                  }
+                  .card:hover { transform: translateY(-4px); }
+                  .card.products-card:hover { border-color: var(--accent-products); }
+                  .card.cloud-card:hover { border-color: var(--accent-cloud); }
+                  .card-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+                  .status-badge {
+                      font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.75rem;
+                      background-color: rgba(16, 185, 129, 0.1); color: #10b981; border-radius: 9999px;
+                  }
+                  .card h2 { font-size: 1.35rem; margin-bottom: 0.75rem; }
+                  .card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; margin-bottom: 2rem; }
+                  .card-action { font-size: 0.9rem; font-weight: 600; }
+                  .products-card .card-action { color: var(--accent-products); }
+                  .cloud-card .card-action { color: var(--accent-cloud); }
+                  .footer { color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem; }
+                  .footer code { background-color: var(--bg-card); padding: 0.125rem 0.375rem; border-radius: 4px; font-family: monospace; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <header class="header">
+                      <h1>Continuous Integration Test Portal</h1>
+                      <p>Centralized gateway for system regression matrices and live service analytics</p>
+                  </header>
+                  <div class="grid">
+                      <a href="./products-api/" class="card products-card">
+                          <div class="card-meta"><span>📦</span><span class="status-badge">Live Report</span></div>
+                          <h2>Products Core Service API</h2>
+                          <p>Monitors dynamic SDE dependencies, modular CRUD validation chains, schema assertions, and complex multi-factor dataset variations.</p>
+                          <div class="card-action">Launch Detailed Analytics &rarr;</div>
+                      </a>
+                      <a href="./cloud-api/" class="card cloud-card">
+                          <div class="card-meta"><span>☁️</span><span class="status-badge">Live Report</span></div>
+                          <h2>Automated Cloud Infrastructure API</h2>
+                          <p>Tracks remote cloud ecosystem health, authentication configurations, key security validations, and centralized Postman console run histories.</p>
+                          <div class="card-action">Launch Detailed Analytics &rarr;</div>
+                      </a>
+                  </div>
+                  <footer class="footer">
+                      Enterprise QA Engine Automation Hub • Powered by <code>Newman & Postman-CLI</code>
+                  </footer>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      # 4. Confirm folder structure contents right in your runner logs for debugging
+      - name: Inspect Generated Staging Directory
+        if: always()
+        run: |
+          echo "=== Verification of the Dynamic Public Directory ==="
+          ls -R public
+
+      - name: Upload Pages Web Assets
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - name: Deploy Live Unified Portals
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4
