@@ -75,17 +75,30 @@ jobs:
           path: newman-report.html
           retention-days: 7
 
-      - name: Stage Dashboard for Branch Isolation
+      - name: Fetch, Merge, and Stage Dashboard on gh-pages Branch
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          mkdir -p public/products-api
-          cp ./newman-report.html public/products-api/index.html
+          # 1. Configure local git identity
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 2. Clone the existing gh-pages branch into a target directory if it exists
+          git clone --branch gh-pages https://x-token-auth:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git upstream-pages || mkdir upstream-pages
+          
+          # 3. Create our isolated subfolder inside the pulled branch directory
+          mkdir -p upstream-pages/products-api
+          
+          # 4. Copy the new report into its destination path
+          cp ./newman-report.html upstream-pages/products-api/index.html
+          
+          # 5. Move the entire updated tree to our public staging directory
+          mkdir -p public
+          cp -r upstream-pages/* public/ 2>/dev/null || cp -r upstream-pages/. public/
 
       - name: Commit and Push Assets to gh-pages Branch
         if: success() && github.ref == 'refs/heads/main'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages          
-          folder: public            
-          clean: false          
-          single-commit: false
+          branch: gh-pages
+          folder: public
+          clean: true # Safe to set to true now because we manually merged the folders above!
