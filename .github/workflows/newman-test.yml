@@ -7,12 +7,10 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: "pages"
+  group: "pages-products-api"
   cancel-in-progress: false
 
 jobs:
@@ -76,16 +74,18 @@ jobs:
           name: newman-html-dashboard
           path: newman-report.html
           retention-days: 7
+
       - name: Stage Dashboard for Branch Isolation
         if: success() && github.ref == 'refs/heads/main'
         run: |
           mkdir -p public/products-api
           cp ./newman-report.html public/products-api/index.html
+
       - name: Commit and Push Assets to gh-pages Branch
         if: success() && github.ref == 'refs/heads/main'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages          
           folder: public            
-          clean: false              
-          single-commit: false      
+          clean: false          
+          single-commit: false

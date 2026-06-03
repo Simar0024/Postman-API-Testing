@@ -1,58 +1,89 @@
-name: Automated Cloud API Testing
+name: Products API CI Pipeline Automation
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
+  contents: write
 concurrency:
-  group: "pages"
+  group: "pages-products-api"
   cancel-in-progress: false
 
 jobs:
-  postman-cli-tests:
-    name: Run Postman Cloud Automation Suite
+  api-integration-test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      - name: Execute Postman Suite via CLI Action
-        uses: postmanlabs/postman-cli-action@v1
-        env:
-          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      - name: Install Node.js Environment
+        uses: actions/setup-node@v4
         with:
-          command: |
-            collection run ${{ secrets.POSTMAN_COLL_ID }} \
-              -e ${{ secrets.POSTMAN_ENV_ID }} \
-              -r cli,html \
-              --reporter-html-export ./report.html
+          node-version: '20'
 
-      - name: Upload HTML Report Artifact
+      - name: Install Global Newman, Markdown, & Advanced HTML Reporters
+        run: |
+          npm install -g newman \
+                         newman-reporter-markdown \
+                         newman-reporter-htmlextra
+
+      - name: Initialize Dashboard Step Summary Header
+        run: |
+          echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
+          echo "* **Run Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "* **Branch Context:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "* **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+      - name: Execute Collection Suite
+        id: run-newman
+        run: |
+          newman run "https://api.getpostman.com/collections/${{ secrets.NEWMAN_COLL_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
+            -e "https://api.getpostman.com/environments/${{ secrets.NEWMAN_ENV_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
+            -d ./tests/postman/dataset.json \
+            --env-var "REQRES_API_KEY=${{ secrets.REQRES_API_KEY }}" \
+            --env-var "REQRES_ENV_NAME=${{ secrets.REQRES_ENV_NAME }}" \
+            --delay-request 500 \
+            --disable-unicode \
+            --color off \
+            -r cli,markdown,htmlextra \
+            --reporter-markdown-export text.md \
+            --reporter-htmlextra-export newman-report.html \
+            --reporter-htmlextra-title "Products CRUD Integration Test Matrix" \
+            --reporter-htmlextra-darkTheme
+
+      - name: Publish Test Report Matrix to Dashboard
+        if: always()
+        run: |
+          if [ -f text.md ]; then
+            cat text.md >> $GITHUB_STEP_SUMMARY
+            echo -e "\n\n### 📂 Advanced HTML Report Generated" >> $GITHUB_STEP_SUMMARY
+            echo "Download the **newman-html-dashboard** artifact from the summary actions panel above to inspect body bodies, tokens, and data validation graphs." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Newman execution failed before generating a report file." >> $GITHUB_STEP_SUMMARY
+          fi 
+
+      - name: Upload HTML Dashboard Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: postman-api-test-report
-          path: ./report.html
+          name: newman-html-dashboard
+          path: newman-report.html
           retention-days: 7
 
       - name: Stage Dashboard for Branch Isolation
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          mkdir -p public/cloud-api
-          cp ./report.html public/cloud-api/index.html
+          mkdir -p public/products-api
+          cp ./newman-report.html public/products-api/index.html
 
       - name: Commit and Push Assets to gh-pages Branch
         if: success() && github.ref == 'refs/heads/main'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          branch: gh-pages
-          folder: public
-          clean: false # Prevents deleting public/products-api/
+          branch: gh-pages          
+          folder: public            
+          clean: false             
+          single-commit: false
