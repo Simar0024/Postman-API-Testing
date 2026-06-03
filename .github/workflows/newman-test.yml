@@ -78,29 +78,23 @@ jobs:
       - name: Deploy Products Dashboard via Target Branch Merge
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          # 1. Establish Git Credentials
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 2. Store the fresh report in a temporary root location
           cp ./newman-report.html ../products-api-report.html
           
-          # 3. Fetch the remote tracking branches completely
           git fetch origin
-          
-          # 4. Safely check out or initialize the gh-pages branch locally
+
           if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
             git checkout --orphan gh-pages
             git rm -rf .
           fi
-          
-          # 5. Create the dedicated subfolder without disturbing anything else
+
           mkdir -p products-api
           mv ../products-api-report.html ./products-api/index.html
           
-          # 6. Commit and Push ONLY this subfolder changes to the branch
           git add products-api/index.html
           git commit -m "internal(qa): automated update to products-api metrics" || echo "No changes to commit"
           git push origin gh-pages
