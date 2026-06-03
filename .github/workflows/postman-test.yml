@@ -20,14 +20,11 @@ jobs:
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
         with:
-          # REMOVED the literal double-quotes around the secrets context brackets below:
           command: |
             collection run ${{ secrets.POSTMAN_COLL_ID }} \
               -e ${{ secrets.POSTMAN_ENV_ID }} \
               -r cli,html \
               --reporter-html-export ./report.html
-
-      # This saves the HTML report when the run is complete
       - name: Upload HTML Report Artifact
         if: always()
         uses: actions/upload-artifact@v4
