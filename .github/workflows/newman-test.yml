@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   api-integration-test:
     runs-on: ubuntu-latest
@@ -67,3 +72,17 @@ jobs:
           name: newman-html-dashboard
           path: newman-report.html
           retention-days: 7
+      - name: Stage Dashboard for Static Hosting
+        if: success() && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p public
+          cp newman-report.html public/index.html
+      - name: Upload Pages Web Assets
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+      - name: Deploy Live HTML Report Dashboard
+        if: success() && github.ref == 'refs/heads/main'
+        id: deployment
+        uses: actions/deploy-pages@v4
