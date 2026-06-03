@@ -34,8 +34,6 @@ jobs:
 
       - name: Execute Collection Suite
         id: run-newman
-        # Swapped manual JSON file paths for dynamic cloud URLs using secrets variables.
-        # Data-driven datasets (-d) remain handled out of your repository space.
         run: |
           newman run "https://api.getpostman.com/collections/${{ secrets.NEWMAN_COLL_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
             -e "https://api.getpostman.com/environments/${{ secrets.NEWMAN_ENV_ID }}?apikey=${{ secrets.POSTMAN_API_KEY }}" \
