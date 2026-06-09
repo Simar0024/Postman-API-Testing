@@ -3,7 +3,6 @@ name: Automated Cloud API Testing
 on:
   push:
     branches: [ main ]
-    # OPTIMIZATION: Only triggers if files inside your postman directory change
     paths:
       - 'tests/postman/cloud/**' 
       - '.github/workflows/postman-test.yml'
