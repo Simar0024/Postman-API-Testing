@@ -3,7 +3,6 @@ name: Products API CI Pipeline Automation
 on:
   push:
     branches: [ main ]
-    # OPTIMIZATION: Only triggers if files inside your newman/dataset directory change
     paths:
       - 'tests/postman/social-prod.postman_environment.json'
       - 'tests/postman/dataset.json'
@@ -64,17 +63,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 1. Capture a clean, standardized timestamp variable (e.g., 20260610-014522)
           TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
-          
-          # Stage the fresh report out of the working tree
+
           cp ./products-report.html ../products-api-report.html
           
-          # Set up authenticated remote URL
           git remote set-url origin "https://x-access-token:${MY_GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin
           
-          # Check out or initialize gh-pages branch
           if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
@@ -82,18 +77,14 @@ jobs:
             git rm -rf .
           fi
           
-          # Enter or create subfolder
           mkdir -p products-api
-          
-          # 2. Save the report file matching the explicit timestamp format
+
           REPORT_FILE="report-${TIMESTAMP}.html"
           mv ../products-api-report.html "./products-api/$REPORT_FILE"
-          
-          # Rebuild index.html list of past 6 reports using file creation markers
+
           cd products-api
           ls -1 report-*.html | sort -n > sorted_reports.txt
-          
-          # Create HTML History Dashboard
+
           cat << 'EOF' > index.html
           <!DOCTYPE html>
           <html lang="en">
@@ -118,13 +109,10 @@ jobs:
               <p>Historical run results organized by execution timestamps (showing up to last 6 entries):</p>
               <ul>
           EOF
-          
-          # Append list items newest to oldest
+
           tail -n 6 sorted_reports.txt | sort -nr | while read -r file; do
               if [ -n "$file" ]; then
-                  # Extract raw text segment from the filename for visual display
                   RAW_TIME=$(echo "$file" | sed 's/report-\(.*\)\.html/\1/')
-                  # Convert YYYYMMDD-HHMMSS to a cleaner display layout
                   DISPLAY_TIME=$(echo "$RAW_TIME" | sed -E 's/([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})([0-9]{2})/\1-\2-\3 \4:\5:\6/')
                   
                   echo "              <li>" >> index.html
@@ -139,13 +127,11 @@ jobs:
           </body>
           </html>
           EOF
-          
-          # Prune old reports, retaining only the newest 6 files on the branch
+
           head -n -6 sorted_reports.txt | xargs -r rm -f
           rm -f sorted_reports.txt
           cd ..
           
-          # Commit and Push
           git add products-api/
           git commit -m "internal(qa): append products-api history metric for timestamp $TIMESTAMP" || echo "No changes to commit"
           
