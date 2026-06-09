@@ -3,11 +3,20 @@ name: Products API CI Pipeline Automation
 on:
   push:
     branches: [ main ]
+    # OPTIMIZATION: Only triggers if files inside your newman/dataset directory change
+    paths:
+      - 'tests/postman/social-prod.postman_environment.json'
+      - 'tests/postman/dataset.json'
+      - '.github/workflows/newman-test.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'tests/postman/dataset.json'
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: "pages-products-api"
@@ -31,14 +40,6 @@ jobs:
                          newman-reporter-markdown \
                          newman-reporter-htmlextra
 
-      - name: Initialize Dashboard Step Summary Header
-        run: |
-          echo "## 📊 Products API Automation Test Matrix" >> $GITHUB_STEP_SUMMARY
-          echo "* **Run Triggered By:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "* **Branch Context:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "* **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-
       - name: Execute Collection Suite
         id: run-newman
         run: |
@@ -50,51 +51,55 @@ jobs:
             --delay-request 500 \
             --disable-unicode \
             --color off \
-            -r cli,markdown,htmlextra \
-            --reporter-markdown-export text.md \
-            --reporter-htmlextra-export newman-report.html \
+            -r cli,htmlextra \
+            --reporter-htmlextra-export products-report.html \
             --reporter-htmlextra-title "Products CRUD Integration Test Matrix" \
             --reporter-htmlextra-darkTheme
 
-      - name: Publish Test Report Matrix to Dashboard
-        if: always()
-        run: |
-          if [ -f text.md ]; then
-            cat text.md >> $GITHUB_STEP_SUMMARY
-            echo -e "\n\n### 📂 Advanced HTML Report Generated" >> $GITHUB_STEP_SUMMARY
-            echo "Download the **newman-html-dashboard** artifact from the summary actions panel above to inspect body bodies, tokens, and data validation graphs." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Newman execution failed before generating a report file." >> $GITHUB_STEP_SUMMARY
-          fi 
-
-      - name: Upload HTML Dashboard Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: newman-html-dashboard
-          path: newman-report.html
-          retention-days: 7
-
-      - name: Deploy Products Dashboard via Target Branch Merge
+      - name: Deploy Products Dashboard via Resilient Target Branch Merge
         if: success() && github.ref == 'refs/heads/main'
+        env:
+          MY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          cp ./newman-report.html ../products-api-report.html
+          # Save the report out of the working tree
+          cp ./products-report.html ../products-api-report.html
           
+          # Set up secure authenticated remote URL
+          git remote set-url origin "https://x-access-token:${MY_GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin
-
+          
+          # Checkout or establish gh-pages branch
           if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
             git checkout --orphan gh-pages
             git rm -rf .
           fi
-
+          
+          # Inject file updates into our dedicated subfolder
           mkdir -p products-api
           mv ../products-api-report.html ./products-api/index.html
-          
           git add products-api/index.html
           git commit -m "internal(qa): automated update to products-api metrics" || echo "No changes to commit"
-          git push origin gh-pages
+          
+          # RESILIENT LOOP: If another pipeline pushed first, pull, rebase, and retry up to 5 times
+          for i in {1..5}; do
+            if git push origin gh-pages; then
+              echo "✅ Successfully pushed to gh-pages branch!"
+              break
+            else
+              echo "⚠️ Conflict detected! Fetching latest remote changes and rebasing..."
+              git fetch origin gh-pages
+              git rebase origin/gh-pages || (git rebase --abort && git checkout -f gh-pages && mkdir -p products-api && cp ./products-api/index.html ./products-api/index.html)
+              sleep $((RANDOM % 5 + 1)) # Random back-off delay to let the competing pipeline finish
+            fi
+          done
+
+      - name: Request Live GitHub Pages Rebuild Engine
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

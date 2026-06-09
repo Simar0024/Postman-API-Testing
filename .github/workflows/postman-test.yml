@@ -3,11 +3,19 @@ name: Automated Cloud API Testing
 on:
   push:
     branches: [ main ]
+    # OPTIMIZATION: Only triggers if files inside your postman directory change
+    paths:
+      - 'tests/postman/cloud/**' 
+      - '.github/workflows/postman-test.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'tests/postman/cloud/**'
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: "pages-cloud-api"
@@ -33,24 +41,22 @@ jobs:
               -r cli,html \
               --reporter-html-export ./report.html
 
-      - name: Upload HTML Report Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: postman-api-test-report
-          path: ./report.html
-          retention-days: 7
-
-      - name: Deploy Cloud Dashboard via Target Branch Merge
+      - name: Deploy Cloud Dashboard via Resilient Target Branch Merge
         if: success() && github.ref == 'refs/heads/main'
+        env:
+          MY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # Save the report out of the working tree
           cp ./report.html ../cloud-api-report.html
           
+          # Set up secure authenticated remote URL
+          git remote set-url origin "https://x-access-token:${MY_GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin
           
+          # Checkout or establish gh-pages branch
           if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
@@ -58,10 +64,27 @@ jobs:
             git rm -rf .
           fi
           
+          # Inject file updates into our dedicated subfolder
           mkdir -p cloud-api
           mv ../cloud-api-report.html ./cloud-api/index.html
-          
           git add cloud-api/index.html
           git commit -m "internal(qa): automated update to cloud-api metrics" || echo "No changes to commit"
-          git push origin gh-pages
           
+          # RESILIENT LOOP: If another pipeline pushed first, pull, rebase, and retry up to 5 times
+          for i in {1..5}; do
+            if git push origin gh-pages; then
+              echo "✅ Successfully pushed to gh-pages branch!"
+              break
+            else
+              echo "⚠️ Conflict detected! Fetching latest remote changes and rebasing..."
+              git fetch origin gh-pages
+              git rebase origin/gh-pages || (git rebase --abort && git checkout -f gh-pages && mkdir -p cloud-api && cp ./cloud-api/index.html ./cloud-api/index.html)
+              sleep $((RANDOM % 5 + 1)) # Random back-off delay to let the competing pipeline finish
+            fi
+          done
+
+      - name: Request Live GitHub Pages Rebuild Engine
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
