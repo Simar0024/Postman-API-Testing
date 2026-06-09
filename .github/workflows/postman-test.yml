@@ -41,7 +41,7 @@ jobs:
               -r cli,html \
               --reporter-html-export ./report.html
 
-      - name: Deploy Cloud Dashboard via Resilient Target Branch Merge
+      - name: Deploy Cloud Dashboard and Maintain Timestamped History
         if: success() && github.ref == 'refs/heads/main'
         env:
           MY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,14 +49,14 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Save the report out of the working tree
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+          HUMAN_DATE=$(date +'%b %d, %Y at %I:%M:%S %p UTC')
+
           cp ./report.html ../cloud-api-report.html
           
-          # Set up secure authenticated remote URL
           git remote set-url origin "https://x-access-token:${MY_GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin
-          
-          # Checkout or establish gh-pages branch
+
           if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
@@ -64,21 +64,72 @@ jobs:
             git rm -rf .
           fi
           
-          # Inject file updates into our dedicated subfolder
           mkdir -p cloud-api
-          mv ../cloud-api-report.html ./cloud-api/index.html
-          git add cloud-api/index.html
-          git commit -m "internal(qa): automated update to cloud-api metrics" || echo "No changes to commit"
           
-          # RESILIENT LOOP: If another pipeline pushed first, pull, rebase, and retry up to 5 times
+          REPORT_FILE="report-${TIMESTAMP}.html"
+          mv ../cloud-api-report.html "./cloud-api/$REPORT_FILE"
+          
+          cd cloud-api
+          ls -1 report-*.html | sort -n > sorted_reports.txt
+          
+          cat << 'EOF' > index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Cloud API Test Reports History</title>
+              <style>
+                  body { background-color: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 2.5rem; max-width: 800px; margin: 0 auto; }
+                  h1 { font-size: 2rem; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+                  p { color: #94a3b8; margin-bottom: 2rem; }
+                  ul { list-style-type: none; padding-left: 0; }
+                  li { background-color: #1e293b; margin-bottom: 0.75rem; padding: 1.25rem 1.5rem; border-radius: 8px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+                  a { color: #38bdf8; text-decoration: none; font-weight: 600; font-size: 1.1rem; }
+                  a:hover { text-decoration: underline; }
+                  .run-meta { display: flex; flex-direction: column; text-align: right; font-size: 0.875rem; color: #94a3b8; }
+                  .timestamp-label { font-family: monospace; background: #334155; color: #cbd5e1; padding: 2px 6px; border-radius: 4px; margin-top: 4px; font-size: 0.8rem; }
+              </style>
+          </head>
+          <body>
+              <h1>☁️ Cloud API Test Reports History</h1>
+              <p>Historical run results organized by execution timestamps (showing up to last 6 entries):</p>
+              <ul>
+          EOF
+          
+          tail -n 6 sorted_reports.txt | sort -nr | while read -r file; do
+              if [ -n "$file" ]; then
+                  RAW_TIME=$(echo "$file" | sed 's/report-\(.*\)\.html/\1/')
+                  DISPLAY_TIME=$(echo "$RAW_TIME" | sed -E 's/([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})([0-9]{2})/\1-\2-\3 \4:\5:\6/')
+                  
+                  echo "              <li>" >> index.html
+                  echo "                  <a href=\"$file\">📄 Execution Dashboard Report</a>" >> index.html
+                  echo "                  <div class=\"run-meta\">Execution Window <span class=\"timestamp-label\">$DISPLAY_TIME UTC</span></div>" >> index.html
+                  echo "              </li>" >> index.html
+              fi
+          done
+          
+          cat << 'EOF' >> index.html
+              </ul>
+          </body>
+          </html>
+          EOF
+          
+          head -n -6 sorted_reports.txt | xargs -r rm -f
+          rm -f sorted_reports.txt
+          cd ..
+          
+          git add cloud-api/
+          git commit -m "internal(qa): append cloud-api history metric for timestamp $TIMESTAMP" || echo "No changes to commit"
+          
           for i in {1..5}; do
             if git push origin gh-pages; then
-              echo "✅ Successfully pushed to gh-pages branch!"
+              echo "✅ Successfully pushed Cloud timestamp history!"
               break
             else
-              echo "⚠️ Conflict detected! Fetching latest remote changes and rebasing..."
+              echo "⚠️ Conflict detected! Fetching remote changes and rebasing..."
               git fetch origin gh-pages
-              git rebase origin/gh-pages || (git rebase --abort && git checkout -f gh-pages && mkdir -p cloud-api && cp ./cloud-api/index.html ./cloud-api/index.html)
-              sleep $((RANDOM % 5 + 1)) # Random back-off delay to let the competing pipeline finish
+              git rebase origin/gh-pages || (git rebase --abort && git checkout -f gh-pages)
+              sleep $((RANDOM % 5 + 1))
             fi
           done
