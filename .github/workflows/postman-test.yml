@@ -82,9 +82,3 @@ jobs:
               sleep $((RANDOM % 5 + 1)) # Random back-off delay to let the competing pipeline finish
             fi
           done
-
-      - name: Request Live GitHub Pages Rebuild Engine
-        if: success() && github.ref == 'refs/heads/main'
-        uses: actions/deploy-pages@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
